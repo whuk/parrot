@@ -1,13 +1,15 @@
 mod echo;
 mod formats;
+mod models;
 mod replay;
 mod stream;
 
 use std::io;
 use std::net::IpAddr;
+use std::sync::{Arc, RwLock};
 
 use axum::{
-    Json, Router,
+    Extension, Json, Router,
     extract::DefaultBodyLimit,
     http::{StatusCode, Uri, header},
     response::{IntoResponse, Response},
@@ -34,6 +36,10 @@ struct Args {
     /// 브라우저를 자동으로 열지 않음 (API 서버로만 사용)
     #[arg(long)]
     no_browser: bool,
+
+    /// 시작 시 최신 모델 목록을 받아오지 않음 (내장 목록만 사용)
+    #[arg(long)]
+    no_model_update: bool,
 }
 
 /// static/ 폴더를 바이너리에 내장 (debug 빌드에서는 디스크에서 직접 읽음)
@@ -57,8 +63,17 @@ async fn main() -> io::Result<()> {
     };
     let url = format!("http://{browser_host}:{}", addr.port());
 
+    let catalog = Arc::new(RwLock::new(models::Catalog::builtin(
+        if args.no_model_update {
+            models::Status::Disabled
+        } else {
+            models::Status::Pending
+        },
+    )));
+
     let app = Router::new()
         .route("/api/health", get(health))
+        .route("/api/models", get(models::list))
         .route("/api/echo", post(echo::echo))
         .route("/api/replay", post(replay::replay))
         .route("/api/replay/parse", post(replay::parse_preview))
@@ -66,10 +81,16 @@ async fn main() -> io::Result<()> {
         // 긴 스트림 캡처도 붙여넣을 수 있도록 (기본 2MB)
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         // 다른 포트의 로컬 프론트엔드에서도 바로 호출할 수 있도록
-        .layer(CorsLayer::permissive());
+        .layer(CorsLayer::permissive())
+        .layer(Extension(catalog.clone()));
 
     println!("parrot v{} 실행 중: {url}", env!("CARGO_PKG_VERSION"));
     println!("종료하려면 Ctrl+C");
+
+    // 서버 시작을 막지 않도록 백그라운드에서 갱신 (오프라인이면 내장 목록 유지)
+    if !args.no_model_update {
+        tokio::spawn(models::refresh(catalog));
+    }
 
     if !args.no_browser
         && let Err(e) = open::that_detached(&url)

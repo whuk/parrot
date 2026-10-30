@@ -53,6 +53,8 @@
     #health { margin-left: auto; font-size: 12px; color: var(--muted); }
     #health.ok { color: var(--ok); }
     #health.err { color: var(--err); }
+    #models-status { font-size: 12px; color: var(--muted); }
+    #models-status[title]:not([title=""]) { cursor: help; }
 
     main {
       display: grid;
@@ -220,6 +222,7 @@
     <h1>🦜 Parrot</h1>
     <p>LLM 스트림 echo / replay 테스트</p>
     <span id="health">서버 확인 중…</span>
+    <span id="models-status"></span>
   </header>
 
   <main>
@@ -353,13 +356,23 @@
       echo: '다른 LLM에서 받은 응답 텍스트를 붙여넣으세요.',
       replay: '캡처한 스트림을 붙여넣으세요.\n- SSE 원문 (DevTools Response 탭, curl 출력)\n- DevTools EventStream 탭 복사본\n- JSON 배열',
     };
-    // 첫 항목은 서버의 포맷별 기본 모델명 (src/formats/mod.rs default_model과 동일)
-    const MODELS = {
-      openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-5', 'gpt-5-mini', 'o3', 'o4-mini'],
-      claude: ['claude-sonnet-4-5', 'claude-opus-4-1', 'claude-haiku-4-5', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'],
-      gemini: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'],
+    // 모델 목록은 서버(/api/models)에서 받는다. 서버는 시작 시 최신 목록으로 갱신을 시도한다.
+    // 서버에 닿지 못할 때만 쓰는 최소 목록 (기본 모델명은 src/formats/mod.rs default_model과 동일)
+    const FALLBACK_CATALOG = {
+      status: 'skipped',
+      source: 'builtin',
+      formats: {
+        openai: { default: 'gpt-4o', models: [] },
+        claude: { default: 'claude-sonnet-4-5', models: [] },
+        gemini: { default: 'gemini-2.5-flash', models: [] },
+      },
     };
     const CUSTOM_MODEL = '__custom';
+    const MODEL_POLL_MS = 1500;
+    const MODEL_POLL_LIMIT = 15;
+    let catalog = FALLBACK_CATALOG;
+    // 저장된 모델이 최신 목록에만 있을 수 있어, 목록이 갱신될 때까지 기억해 둔다
+    let wantedModel = '';
     const STORE_KEY = 'parrot:ui';
 
     let mode = 'echo';
@@ -389,6 +402,7 @@
       for (const el of $$('.opts [name]')) {
         const v = saved.fields?.[`${el.closest('.opts').dataset.for}.${el.name}`];
         if (v !== undefined) el.value = v;
+        if (el.name === 'model' && v) wantedModel = v;
         // 모델 목록은 포맷에 따라 달라지므로, 포맷을 복원한 직후 다시 채운다 (DOM 순서상 model보다 앞)
         if (el.name === 'format') renderModels();
       }
@@ -397,20 +411,59 @@
     }
 
     // ---------------------------------------------------------------- 모델 목록
+    async function loadModels(attempt = 0) {
+      try {
+        const res = await fetch('/api/models');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        catalog = await res.json();
+      } catch {
+        catalog = FALLBACK_CATALOG;
+      }
+      renderModelStatus();
+      // 서버가 아직 최신 목록을 받는 중이면 잠시 뒤 다시 확인
+      if (catalog.status === 'pending' && attempt < MODEL_POLL_LIMIT) {
+        setTimeout(async () => {
+          await loadModels(attempt + 1);
+          renderModels();
+        }, MODEL_POLL_MS);
+      }
+    }
+    function renderModelStatus() {
+      const el = $('#models-status');
+      const when = catalog.updated_at
+        ? new Date(catalog.updated_at * 1000).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+        : '';
+      const text = {
+        updated: `모델 목록 최신 (models.dev · ${when})`,
+        pending: '모델 목록 확인 중…',
+        skipped: '내장 모델 목록 (오프라인)',
+        disabled: '내장 모델 목록',
+      }[catalog.status] ?? '내장 모델 목록';
+      el.textContent = text;
+      el.title = catalog.status === 'skipped'
+        ? '인터넷에 연결되지 않아 최신 모델 목록을 받지 못했습니다. 내장 목록을 사용합니다.'
+        : '';
+    }
     function renderModels() {
       const format = $('[name=format]').value;
       const select = $('[name=model]');
       const previous = select.value;
-      const [defaultModel, ...others] = MODELS[format];
+      const entry = catalog.formats[format];
 
       const option = (value, label) => new Option(label ?? value, value);
       select.replaceChildren(
-        option('', `${defaultModel} (기본값)`),
-        ...others.map(m => option(m)),
+        option('', `${entry.default} (기본값)`),
+        ...entry.models.map(m => option(m)),
         option(CUSTOM_MODEL, '직접 입력…'),
       );
-      // 새 포맷에도 있는 값이면 유지, 아니면 기본값으로
-      select.value = [...select.options].some(o => o.value === previous) ? previous : '';
+      // 새 목록에도 있는 값이면 유지, 아니면 기본값으로
+      const has = value => [...select.options].some(o => o.value === value);
+      if (wantedModel && has(wantedModel)) {
+        select.value = wantedModel;
+        wantedModel = '';
+      } else {
+        select.value = has(previous) ? previous : '';
+      }
       $('#model-custom').hidden = select.value !== CUSTOM_MODEL;
     }
 
@@ -653,8 +706,12 @@
     $('#sample').addEventListener('click', insertSample);
     $('#curl').addEventListener('click', copyCurl);
     input.addEventListener('input', save);
-    $('[name=format]').addEventListener('change', renderModels);
+    $('[name=format]').addEventListener('change', () => {
+      wantedModel = '';
+      renderModels();
+    });
     $('[name=model]').addEventListener('change', () => {
+      wantedModel = '';
       const custom = $('[name=model]').value === CUSTOM_MODEL;
       $('#model-custom').hidden = !custom;
       if (custom) $('[name=model_custom]').focus();
@@ -667,9 +724,12 @@
       }
     });
 
-    renderModels();
-    restore();
-    renderMode();
+    (async () => {
+      await loadModels();
+      renderModels();
+      restore();
+      renderMode();
+    })();
 
     fetch('/api/health')
       .then(r => r.json())

@@ -37,6 +37,11 @@ parrot [--port 8787] [--host 127.0.0.1] [--no-browser]
 | `-p, --port` | `8787` | 시작 포트. 사용 중이면 다음 포트를 시도 |
 | `--host` | `127.0.0.1` | 다른 기기에서 접속하려면 `0.0.0.0` |
 | `--no-browser` | | 브라우저를 열지 않고 API 서버로만 실행 |
+| `--no-model-update` | | 시작 시 최신 모델 목록을 받아오지 않음 |
+
+### 모델 목록 자동 갱신
+
+실행하면 백그라운드에서 [models.dev](https://models.dev)(API 키 없이 쓰는 공개 모델 카탈로그)로부터 OpenAI · Anthropic · Google의 최신 텍스트 모델 목록을 받아 UI의 모델 선택에 반영합니다. 오프라인이거나 연결에 실패하면 조용히 건너뛰고 내장 목록을 사용합니다. 서버 시작은 기다리지 않습니다. 프록시 환경에서는 `HTTPS_PROXY` 환경 변수를 따릅니다.
 
 ## API
 
@@ -86,6 +91,10 @@ curl -N localhost:8787/api/replay -H 'content-type: application/json' \
 - **JSON 배열**: 문자열(`"[DONE]"`), 페이로드 객체(`type` 필드가 있으면 `event:` 줄도 생성), `{event, data, time | delay_ms}` 객체를 섞어 쓸 수 있습니다.
 
 응답 헤더 `x-parrot-input-type`, `x-parrot-events`로 감지 결과를 확인할 수 있습니다.
+
+### `GET /api/models`
+
+포맷별 기본 모델과 선택 가능한 모델 목록을 돌려줍니다. `status`는 `pending`(갱신 중) · `updated`(최신) · `skipped`(오프라인, 내장 목록) · `disabled`(`--no-model-update`) 중 하나입니다.
 
 ### `POST /api/replay/parse`
 
