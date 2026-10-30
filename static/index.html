@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Parrot</title>
+  <style>
+    :root {
+      --bg: #f7f7f5;
+      --panel: #ffffff;
+      --fg: #1d1d1b;
+      --muted: #6b6b66;
+      --line: #e3e3de;
+      --field: #fbfbfa;
+      --accent: #2f6fde;
+      --accent-fg: #ffffff;
+      --ok: #1f8a4c;
+      --err: #c0392b;
+      --code-bg: #f1f1ee;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #161615;
+        --panel: #1f1f1d;
+        --fg: #ececea;
+        --muted: #9a9a94;
+        --line: #33332f;
+        --field: #181817;
+        --accent: #5b8ff0;
+        --accent-fg: #0d0d0c;
+        --ok: #4cc27f;
+        --err: #e5675a;
+        --code-bg: #171716;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    header {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--line);
+    }
+    header h1 { margin: 0; font-size: 18px; }
+    header p { margin: 0; color: var(--muted); font-size: 13px; }
+    #health { margin-left: auto; font-size: 12px; color: var(--muted); }
+    #health.ok { color: var(--ok); }
+    #health.err { color: var(--err); }
+
+    main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      padding: 16px 24px 24px;
+      height: calc(100vh - 57px);
+    }
+    .panel {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px;
+      gap: 12px;
+    }
+
+    .seg { display: inline-flex; align-self: flex-start; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+    .seg button {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      padding: 6px 14px;
+      font: inherit;
+      cursor: pointer;
+    }
+    .seg button.on { background: var(--accent); color: var(--accent-fg); }
+
+    .opts { display: flex; flex-wrap: wrap; gap: 10px; }
+    .opts[hidden] { display: none; }
+    label.opt { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+    select, input, textarea {
+      font: inherit;
+      color: var(--fg);
+      background: var(--field);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 5px 8px;
+    }
+    input[type=number] { width: 90px; }
+    input.wide { width: 170px; }
+    textarea {
+      flex: 1;
+      min-height: 160px;
+      resize: none;
+      font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .actions .hint { margin-left: auto; font-size: 12px; color: var(--muted); }
+    button.btn {
+      font: inherit;
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      background: var(--field);
+      color: var(--fg);
+      cursor: pointer;
+    }
+    button.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+    button.btn:disabled { opacity: .45; cursor: default; }
+
+    .stats { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); }
+    .stats b { color: var(--fg); font-weight: 600; }
+    #state.ok { color: var(--ok); }
+    #state.err { color: var(--err); }
+
+    .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+    .tabs button {
+      border: 0;
+      border-bottom: 2px solid transparent;
+      background: none;
+      color: var(--muted);
+      padding: 6px 10px;
+      font: inherit;
+      cursor: pointer;
+    }
+    .tabs button.on { color: var(--fg); border-bottom-color: var(--accent); }
+
+    .view { flex: 1; min-height: 0; overflow: auto; }
+    .view[hidden] { display: none; }
+    #text { white-space: pre-wrap; word-break: break-word; font-size: 14.5px; line-height: 1.65; }
+    #text.streaming::after {
+      content: "▍";
+      color: var(--accent);
+      animation: blink 1s steps(1) infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+    .empty { color: var(--muted); font-size: 13px; }
+    .frame { display: flex; gap: 10px; padding: 4px 0; border-bottom: 1px dashed var(--line); }
+    .frame .t { flex: none; width: 64px; text-align: right; color: var(--muted); font: 11.5px/1.6 ui-monospace, monospace; }
+    .frame pre {
+      margin: 0;
+      flex: 1;
+      min-width: 0;
+      white-space: pre-wrap;
+      word-break: break-all;
+      font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .error-box { color: var(--err); white-space: pre-wrap; }
+
+    #toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--fg);
+      color: var(--bg);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      opacity: 0;
+      transition: opacity .2s;
+      pointer-events: none;
+    }
+    #toast.show { opacity: 1; }
+
+    @media (max-width: 860px) {
+      header { padding: 12px 16px; flex-wrap: wrap; }
+      main { grid-template-columns: 1fr; height: auto; padding: 12px 16px 16px; }
+      .panel { min-height: 420px; }
+      .actions .hint { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🦜 Parrot</h1>
+    <p>LLM 스트림 echo / replay 테스트</p>
+    <span id="health">서버 확인 중…</span>
+  </header>
+
+  <main>
+    <section class="panel">
+      <div class="seg" role="tablist" aria-label="API">
+        <button data-mode="echo" class="on">Echo</button>
+        <button data-mode="replay">Replay</button>
+      </div>
+
+      <div class="opts" data-for="echo">
+        <label class="opt">포맷
+          <select name="format">
+            <option value="openai">OpenAI</option>
+            <option value="claude">Claude</option>
+            <option value="gemini">Gemini</option>
+          </select>
+        </label>
+        <label class="opt">조각 단위
+          <select name="chunk">
+            <option value="word">단어</option>
+            <option value="char">글자</option>
+            <option value="line">줄</option>
+          </select>
+        </label>
+        <label class="opt">지연(ms)<input type="number" name="delay_ms" value="30" min="0"></label>
+        <label class="opt">지터(ms)<input type="number" name="jitter_ms" value="20" min="0"></label>
+        <label class="opt">모델명<input class="wide" name="model" placeholder="포맷별 기본값"></label>
+      </div>
+
+      <div class="opts" data-for="replay" hidden>
+        <label class="opt">입력 형식
+          <select name="input_type">
+            <option value="auto">자동 감지</option>
+            <option value="sse">SSE 원문</option>
+            <option value="devtools">DevTools 복사</option>
+            <option value="json">JSON</option>
+          </select>
+        </label>
+        <label class="opt">타이밍
+          <select name="timing">
+            <option value="auto">자동</option>
+            <option value="original">원본 간격</option>
+            <option value="fixed">고정 간격</option>
+          </select>
+        </label>
+        <label class="opt">배속<input type="number" name="speed" value="1" min="0.1" step="0.1"></label>
+        <label class="opt">지연(ms)<input type="number" name="delay_ms" value="30" min="0"></label>
+        <label class="opt">지터(ms)<input type="number" name="jitter_ms" value="0" min="0"></label>
+        <label class="opt">최대 간격(ms)<input type="number" name="max_gap_ms" placeholder="제한 없음" min="0"></label>
+      </div>
+
+      <textarea id="input" spellcheck="false"></textarea>
+
+      <div class="actions">
+        <button class="btn primary" id="run">실행</button>
+        <button class="btn" id="stop" disabled>중지</button>
+        <button class="btn" id="preview" hidden>파싱 미리보기</button>
+        <button class="btn" id="sample">샘플</button>
+        <button class="btn" id="curl">curl 복사</button>
+        <span class="hint">⌘/Ctrl + Enter 실행</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="stats">
+        <span id="state">대기</span>
+        <span>형식 <b id="s-type">-</b></span>
+        <span>이벤트 <b id="s-events">0</b></span>
+        <span>첫 응답 <b id="s-ttfb">-</b></span>
+        <span>경과 <b id="s-elapsed">-</b></span>
+      </div>
+      <div class="tabs">
+        <button data-view="text" class="on">텍스트</button>
+        <button data-view="raw">원본 스트림</button>
+      </div>
+      <div class="view" id="v-text"><div id="text"><span class="empty">실행하면 스트리밍된 텍스트가 여기에 표시됩니다.</span></div></div>
+      <div class="view" id="v-raw" hidden><div id="raw"><span class="empty">수신한 SSE 프레임이 수신 시각과 함께 표시됩니다.</span></div></div>
+    </section>
+  </main>
+
+  <div id="toast"></div>
+
+  <script>
+    const $ = (sel, root = document) => root.querySelector(sel);
+    const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+
+    const SAMPLES = {
+      echo: [
+        '안녕하세요! 저는 Parrot입니다.\n\n붙여넣은 텍스트를 LLM이 생성하는 것처럼 조금씩 스트리밍으로 돌려드려요. '
+          + 'OpenAI, Claude, Gemini 형식 중 하나를 골라 클라이언트의 스트림 처리를 테스트해 보세요.',
+      ],
+      replay: [
+        // SSE 원문
+        'data: {"id":"chatcmpl-1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}\n\n'
+          + 'data: {"id":"chatcmpl-1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"SSE 원문"},"finish_reason":null}]}\n\n'
+          + 'data: {"id":"chatcmpl-1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":" 샘플입니다."},"finish_reason":null}]}\n\n'
+          + 'data: {"id":"chatcmpl-1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n'
+          + 'data: [DONE]\n',
+        // DevTools EventStream 복사본 (Time 열로 원본 간격 재생)
+        'Type\tData\tTime\n'
+          + 'content_block_delta\t{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"DevTools"}}\t12:00:00.000\n'
+          + 'content_block_delta\t{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" 복사본은"}}\t12:00:00.400\n'
+          + 'content_block_delta\t{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" 원래 간격대로"}}\t12:00:01.200\n'
+          + 'content_block_delta\t{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" 재생돼요."}}\t12:00:01.500\n'
+          + 'message_stop\t{"type":"message_stop"}\t12:00:01.600',
+        // JSON 배열
+        JSON.stringify([
+          { candidates: [{ content: { parts: [{ text: 'JSON 배열' }], role: 'model' } }] },
+          { candidates: [{ content: { parts: [{ text: ' 샘플입니다.' }], role: 'model' }, finishReason: 'STOP' }] },
+        ], null, 2),
+      ],
+    };
+    const PLACEHOLDER = {
+      echo: '다른 LLM에서 받은 응답 텍스트를 붙여넣으세요.',
+      replay: '캡처한 스트림을 붙여넣으세요.\n- SSE 원문 (DevTools Response 탭, curl 출력)\n- DevTools EventStream 탭 복사본\n- JSON 배열',
+    };
+    const STORE_KEY = 'parrot:ui';
+
+    let mode = 'echo';
+    let sampleIndex = { echo: 0, replay: 0 };
+    let controller = null;
+    let timer = null;
+
+    const input = $('#input');
+    const textEl = $('#text');
+    const rawEl = $('#raw');
+
+    // ---------------------------------------------------------------- 상태 저장 (브라우저별 편의 기능)
+    function save() {
+      try {
+        const fields = {};
+        for (const el of $$('.opts [name]')) fields[`${el.closest('.opts').dataset.for}.${el.name}`] = el.value;
+        localStorage.setItem(STORE_KEY, JSON.stringify({ mode, fields, input: { ...loadInputs(), [mode]: input.value } }));
+      } catch {}
+    }
+    function loadInputs() {
+      try { return JSON.parse(localStorage.getItem(STORE_KEY))?.input ?? {}; } catch { return {}; }
+    }
+    function restore() {
+      let saved;
+      try { saved = JSON.parse(localStorage.getItem(STORE_KEY)); } catch {}
+      if (!saved) return;
+      for (const el of $$('.opts [name]')) {
+        const v = saved.fields?.[`${el.closest('.opts').dataset.for}.${el.name}`];
+        if (v !== undefined) el.value = v;
+      }
+      mode = saved.mode === 'replay' ? 'replay' : 'echo';
+    }
+
+    // ---------------------------------------------------------------- 모드 / 탭
+    function setMode(next) {
+      if (next === mode) return;
+      save();
+      mode = next;
+      renderMode();
+      save();
+    }
+    function renderMode() {
+      for (const b of $$('.seg button')) b.classList.toggle('on', b.dataset.mode === mode);
+      for (const o of $$('.opts')) o.hidden = o.dataset.for !== mode;
+      $('#preview').hidden = mode !== 'replay';
+      input.placeholder = PLACEHOLDER[mode];
+      input.value = loadInputs()[mode] ?? '';
+    }
+    function setView(view) {
+      for (const b of $$('.tabs button')) b.classList.toggle('on', b.dataset.view === view);
+      $('#v-text').hidden = view !== 'text';
+      $('#v-raw').hidden = view !== 'raw';
+    }
+
+    // ---------------------------------------------------------------- 요청 생성
+    function options() {
+      const body = {};
+      for (const el of $$(`.opts[data-for="${mode}"] [name]`)) {
+        if (el.value === '') continue;
+        body[el.name] = el.type === 'number' ? Number(el.value) : el.value;
+      }
+      return body;
+    }
+    function request(path) {
+      const body = mode === 'echo'
+        ? { text: input.value, ...options() }
+        : { raw: input.value, ...options() };
+      return { url: path ?? `/api/${mode}`, body };
+    }
+
+    // ---------------------------------------------------------------- 스트림 → 텍스트 추출
+    function extractText(frame) {
+      let out = '';
+      for (const line of frame.split('\n')) {
+        if (!line.startsWith('data:')) continue;
+        const data = line.slice(5).trim();
+        if (!data || data === '[DONE]') continue;
+        let j;
+        try { j = JSON.parse(data); } catch { continue; }
+        for (const item of Array.isArray(j) ? j : [j]) out += textOf(item);
+      }
+      return out;
+    }
+    function textOf(j) {
+      if (j?.choices) return j.choices.map(c => c.delta?.content ?? c.text ?? '').join('');          // OpenAI Chat
+      if (j?.type === 'content_block_delta') return j.delta?.text ?? '';                              // Claude
+      if (j?.type === 'response.output_text.delta') return j.delta ?? '';                             // OpenAI Responses
+      if (j?.candidates) {                                                                            // Gemini
+        return j.candidates.map(c => (c.content?.parts ?? []).filter(p => !p.thought).map(p => p.text ?? '').join('')).join('');
+      }
+      return '';
+    }
+
+    // ---------------------------------------------------------------- 실행
+    function resetOutput() {
+      textEl.textContent = '';
+      rawEl.textContent = '';
+      $('#s-type').textContent = '-';
+      $('#s-events').textContent = '0';
+      $('#s-ttfb').textContent = '-';
+      $('#s-elapsed').textContent = '-';
+    }
+    function setState(text, cls = '') {
+      const el = $('#state');
+      el.textContent = text;
+      el.className = cls;
+    }
+    function setRunning(running) {
+      $('#run').disabled = running;
+      $('#preview').disabled = running;
+      $('#stop').disabled = !running;
+      textEl.classList.toggle('streaming', running);
+    }
+    function addFrame(label, text) {
+      const row = document.createElement('div');
+      row.className = 'frame';
+      const t = document.createElement('span');
+      t.className = 't';
+      t.textContent = label;
+      const pre = document.createElement('pre');
+      pre.textContent = text;
+      row.append(t, pre);
+      rawEl.append(row);
+    }
+    function showError(message) {
+      const box = document.createElement('div');
+      box.className = 'error-box';
+      box.textContent = message;
+      textEl.replaceChildren(box);
+      setState('오류', 'err');
+    }
+    function stickToBottom(el, fn) {
+      const view = el.parentElement;
+      const atBottom = view.scrollHeight - view.scrollTop - view.clientHeight < 40;
+      fn();
+      if (atBottom) view.scrollTop = view.scrollHeight;
+    }
+
+    async function run() {
+      if (controller) return;
+      save();
+      resetOutput();
+      setRunning(true);
+      setState('요청 중…');
+
+      const { url, body } = request();
+      controller = new AbortController();
+      const started = performance.now();
+      timer = setInterval(() => {
+        $('#s-elapsed').textContent = `${((performance.now() - started) / 1000).toFixed(2)}s`;
+      }, 50);
+
+      let events = 0;
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(async () => ({ error: await res.text() }));
+          throw new Error(err.error ?? `HTTP ${res.status}`);
+        }
+        $('#s-type').textContent = res.headers.get('x-parrot-input-type') ?? body.format ?? 'openai';
+        setState('스트리밍 중…');
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let firstAt = null;
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let idx;
+          while ((idx = buffer.indexOf('\n\n')) !== -1) {
+            const frame = buffer.slice(0, idx);
+            buffer = buffer.slice(idx + 2);
+            const at = performance.now() - started;
+            if (firstAt === null) {
+              firstAt = at;
+              $('#s-ttfb').textContent = `${Math.round(at)}ms`;
+            }
+            events++;
+            $('#s-events').textContent = events;
+            stickToBottom(rawEl, () => addFrame(`+${Math.round(at)}ms`, frame));
+            const piece = extractText(frame);
+            if (piece) stickToBottom(textEl, () => textEl.append(piece));
+          }
+        }
+        if (buffer.trim()) addFrame('(남음)', buffer);
+        if (!textEl.textContent) textEl.innerHTML = '<span class="empty">추출할 텍스트가 없습니다. 원본 스트림 탭을 확인하세요.</span>';
+        setState('완료', 'ok');
+      } catch (e) {
+        if (e.name === 'AbortError') setState('중지됨');
+        else showError(e.message);
+      } finally {
+        clearInterval(timer);
+        $('#s-elapsed').textContent = `${((performance.now() - started) / 1000).toFixed(2)}s`;
+        controller = null;
+        setRunning(false);
+      }
+    }
+
+    async function preview() {
+      save();
+      resetOutput();
+      setView('raw');
+      const { body } = request();
+      try {
+        const res = await fetch('/api/replay/parse', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+        $('#s-type').textContent = data.input_type;
+        $('#s-events').textContent = data.count;
+        let total = 0;
+        for (const e of data.events) {
+          total += e.wait_ms;
+          addFrame(`+${total}ms`, e.frame.replace(/\n\n$/, ''));
+        }
+        $('#s-elapsed').textContent = `예상 ${(total / 1000).toFixed(2)}s`;
+        setState('파싱 결과', 'ok');
+      } catch (e) {
+        setView('text');
+        showError(e.message);
+      }
+    }
+
+    function toast(message) {
+      const el = $('#toast');
+      el.textContent = message;
+      el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 1600);
+    }
+
+    async function copyCurl() {
+      const { url, body } = request();
+      const json = JSON.stringify(body).replaceAll("'", "'\\''");
+      const cmd = `curl -N ${location.origin}${url} -H 'content-type: application/json' -d '${json}'`;
+      try {
+        await navigator.clipboard.writeText(cmd);
+        toast('curl 명령을 복사했어요');
+      } catch {
+        toast('클립보드에 접근할 수 없어요');
+      }
+    }
+
+    function insertSample() {
+      const list = SAMPLES[mode];
+      input.value = list[sampleIndex[mode] % list.length];
+      sampleIndex[mode]++;
+      save();
+    }
+
+    // ---------------------------------------------------------------- 이벤트 연결
+    $$('.seg button').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+    $$('.tabs button').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
+    $('#run').addEventListener('click', run);
+    $('#stop').addEventListener('click', () => controller?.abort());
+    $('#preview').addEventListener('click', preview);
+    $('#sample').addEventListener('click', insertSample);
+    $('#curl').addEventListener('click', copyCurl);
+    input.addEventListener('input', save);
+    $$('.opts [name]').forEach(el => el.addEventListener('change', save));
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        run();
+      }
+    });
+
+    restore();
+    renderMode();
+
+    fetch('/api/health')
+      .then(r => r.json())
+      .then(d => {
+        const el = $('#health');
+        el.className = 'ok';
+        el.textContent = `● 연결됨 v${d.version}`;
+      })
+      .catch(() => {
+        const el = $('#health');
+        el.className = 'err';
+        el.textContent = '● 서버 연결 안 됨';
+      });
+  </script>
+</body>
+</html>

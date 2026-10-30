@@ -1,0 +1,22 @@
+[package]
+name = "parrot"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = "0.8.9"
+clap = { version = "4.6.7", features = ["derive"] }
+fastrand = "2.5.0"
+futures = "0.3.34"
+mime_guess = "2.0.5"
+open = "5.4.5"
+rust-embed = "8.13.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
+tokio = { version = "1.54.1", features = ["full"] }
+tower-http = { version = "0.7.1", features = ["cors"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
