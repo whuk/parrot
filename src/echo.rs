@@ -97,7 +97,10 @@ mod tests {
     use super::*;
 
     fn parse_data(frame: &str) -> serde_json::Value {
-        let line = frame.lines().find_map(|l| l.strip_prefix("data: ")).unwrap();
+        let line = frame
+            .lines()
+            .find_map(|l| l.strip_prefix("data: "))
+            .unwrap();
         serde_json::from_str(line).unwrap()
     }
 
@@ -122,9 +125,18 @@ mod tests {
         let chunks = split("Hi there", ChunkMode::Word);
         let frames = Format::Openai.frames(&chunks, "m");
         assert_eq!(frames.len(), 5);
-        assert_eq!(parse_data(&frames[0])["choices"][0]["delta"]["role"], "assistant");
-        assert_eq!(parse_data(&frames[2])["choices"][0]["delta"]["content"], " there");
-        assert_eq!(parse_data(&frames[3])["choices"][0]["finish_reason"], "stop");
+        assert_eq!(
+            parse_data(&frames[0])["choices"][0]["delta"]["role"],
+            "assistant"
+        );
+        assert_eq!(
+            parse_data(&frames[2])["choices"][0]["delta"]["content"],
+            " there"
+        );
+        assert_eq!(
+            parse_data(&frames[3])["choices"][0]["finish_reason"],
+            "stop"
+        );
         assert_eq!(frames[4], "data: [DONE]\n\n");
     }
 
@@ -160,13 +172,19 @@ mod tests {
         let first = parse_data(&frames[0]);
         assert_eq!(first["candidates"][0]["content"]["parts"][0]["text"], "Hi");
         assert!(first["candidates"][0].get("finishReason").is_none());
-        assert_eq!(parse_data(&frames[1])["candidates"][0]["finishReason"], "STOP");
+        assert_eq!(
+            parse_data(&frames[1])["candidates"][0]["finishReason"],
+            "STOP"
+        );
     }
 
     #[test]
     fn gemini_empty_text_still_finishes() {
         let frames = Format::Gemini.frames(&[], "m");
         assert_eq!(frames.len(), 1);
-        assert_eq!(parse_data(&frames[0])["candidates"][0]["finishReason"], "STOP");
+        assert_eq!(
+            parse_data(&frames[0])["candidates"][0]["finishReason"],
+            "STOP"
+        );
     }
 }

@@ -71,10 +71,10 @@ async fn main() -> io::Result<()> {
     println!("parrot v{} 실행 중: {url}", env!("CARGO_PKG_VERSION"));
     println!("종료하려면 Ctrl+C");
 
-    if !args.no_browser {
-        if let Err(e) = open::that_detached(&url) {
-            eprintln!("브라우저를 열지 못했습니다 ({e}). 직접 접속하세요: {url}");
-        }
+    if !args.no_browser
+        && let Err(e) = open::that_detached(&url)
+    {
+        eprintln!("브라우저를 열지 못했습니다 ({e}). 직접 접속하세요: {url}");
     }
 
     axum::serve(listener, app)

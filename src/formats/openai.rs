@@ -24,7 +24,10 @@ pub fn frames(chunks: &[String], model: &str) -> Vec<String> {
     };
 
     let mut frames = Vec::with_capacity(chunks.len() + 3);
-    frames.push(chunk(json!({ "role": "assistant", "content": "" }), Value::Null));
+    frames.push(chunk(
+        json!({ "role": "assistant", "content": "" }),
+        Value::Null,
+    ));
     for text in chunks {
         frames.push(chunk(json!({ "content": text }), Value::Null));
     }

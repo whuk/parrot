@@ -8,7 +8,11 @@ pub fn frames(chunks: &[String], model: &str) -> Vec<String> {
     let response_id = random_id(22);
     let empty = [String::new()];
     // 빈 입력이어도 finishReason을 담은 청크 하나는 보낸다
-    let chunks = if chunks.is_empty() { &empty[..] } else { chunks };
+    let chunks = if chunks.is_empty() {
+        &empty[..]
+    } else {
+        chunks
+    };
     let last = chunks.len() - 1;
 
     chunks

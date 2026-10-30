@@ -74,16 +74,26 @@ pub async fn replay(query: Query<ReplayOptions>, headers: HeaderMap, body: Strin
     };
 
     let count = events.len();
-    let frames = waits.into_iter().zip(events.into_iter().map(|e| e.frame)).collect();
+    let frames = waits
+        .into_iter()
+        .zip(events.into_iter().map(|e| e.frame))
+        .collect();
     let mut response = sse_response(frames);
     let response_headers = response.headers_mut();
-    response_headers.insert("x-parrot-input-type", HeaderValue::from_static(detected.as_str()));
+    response_headers.insert(
+        "x-parrot-input-type",
+        HeaderValue::from_static(detected.as_str()),
+    );
     response_headers.insert("x-parrot-events", HeaderValue::from(count));
     response
 }
 
 /// POST /api/replay/parse — 스트리밍 없이 파싱 결과와 대기 시간만 확인 (디버깅/미리보기용)
-pub async fn parse_preview(query: Query<ReplayOptions>, headers: HeaderMap, body: String) -> Response {
+pub async fn parse_preview(
+    query: Query<ReplayOptions>,
+    headers: HeaderMap,
+    body: String,
+) -> Response {
     match prepare(query, &headers, body) {
         Ok((detected, events, waits)) => {
             let events: Vec<Value> = events
@@ -91,7 +101,8 @@ pub async fn parse_preview(query: Query<ReplayOptions>, headers: HeaderMap, body
                 .zip(waits)
                 .map(|(e, wait)| json!({ "wait_ms": wait.as_millis() as u64, "frame": e.frame }))
                 .collect();
-            Json(json!({ "input_type": detected, "count": events.len(), "events": events })).into_response()
+            Json(json!({ "input_type": detected, "count": events.len(), "events": events }))
+                .into_response()
         }
         Err(message) => bad_request(message),
     }
@@ -99,7 +110,11 @@ pub async fn parse_preview(query: Query<ReplayOptions>, headers: HeaderMap, body
 
 type Prepared = (InputType, Vec<Event>, Vec<Duration>);
 
-fn prepare(Query(query): Query<ReplayOptions>, headers: &HeaderMap, body: String) -> Result<Prepared, String> {
+fn prepare(
+    Query(query): Query<ReplayOptions>,
+    headers: &HeaderMap,
+    body: String,
+) -> Result<Prepared, String> {
     let (raw, options) = read_request(query, headers, body)?;
     if !(options.speed > 0.0 && options.speed.is_finite()) {
         return Err("speed는 0보다 큰 수여야 합니다".into());
@@ -110,20 +125,23 @@ fn prepare(Query(query): Query<ReplayOptions>, headers: &HeaderMap, body: String
 }
 
 /// JSON 본문에 raw(또는 input) 필드가 있으면 요청 객체로, 아니면 본문 전체를 캡처 원문으로 본다
-fn read_request(query: ReplayOptions, headers: &HeaderMap, body: String) -> Result<(String, ReplayOptions), String> {
+fn read_request(
+    query: ReplayOptions,
+    headers: &HeaderMap,
+    body: String,
+) -> Result<(String, ReplayOptions), String> {
     let is_json = headers
         .get(header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
         .is_some_and(|ct| ct.contains("json"));
 
-    if is_json {
-        if let Ok(Value::Object(obj)) = serde_json::from_str::<Value>(&body) {
-            if obj.contains_key("raw") || obj.contains_key("input") {
-                let request: ReplayRequest =
-                    serde_json::from_value(Value::Object(obj)).map_err(|e| format!("요청 형식 오류: {e}"))?;
-                return Ok((request.raw, request.options));
-            }
-        }
+    if is_json
+        && let Ok(Value::Object(obj)) = serde_json::from_str::<Value>(&body)
+        && (obj.contains_key("raw") || obj.contains_key("input"))
+    {
+        let request: ReplayRequest = serde_json::from_value(Value::Object(obj))
+            .map_err(|e| format!("요청 형식 오류: {e}"))?;
+        return Ok((request.raw, request.options));
     }
     Ok((body, query))
 }
@@ -132,10 +150,16 @@ fn schedule(events: &[Event], options: &ReplayOptions) -> Vec<Duration> {
     let use_original = match options.timing {
         Timing::Original => true,
         Timing::Fixed => false,
-        Timing::Auto => events.iter().any(|e| e.time_ms.is_some() || e.delay_ms.is_some()),
+        Timing::Auto => events
+            .iter()
+            .any(|e| e.time_ms.is_some() || e.delay_ms.is_some()),
     };
     let fixed = || {
-        let jitter = if options.jitter_ms > 0 { fastrand::u64(0..=options.jitter_ms) } else { 0 };
+        let jitter = if options.jitter_ms > 0 {
+            fastrand::u64(0..=options.jitter_ms)
+        } else {
+            0
+        };
         (options.delay_ms + jitter) as f64
     };
 
@@ -150,7 +174,11 @@ fn schedule(events: &[Event], options: &ReplayOptions) -> Vec<Duration> {
                 delay as f64 / options.speed
             } else if let (Some(time), Some(prev)) = (event.time_ms, prev_time) {
                 // 자정을 넘긴 캡처는 하루를 더해 보정
-                let gap = if time >= prev { time - prev } else { time - prev + DAY_MS };
+                let gap = if time >= prev {
+                    time - prev
+                } else {
+                    time - prev + DAY_MS
+                };
                 gap / options.speed
             } else if i == 0 {
                 0.0
@@ -191,7 +219,11 @@ mod tests {
     fn timed(times: &[Option<f64>]) -> Vec<Event> {
         times
             .iter()
-            .map(|&time_ms| Event { frame: String::new(), time_ms, delay_ms: None })
+            .map(|&time_ms| Event {
+                frame: String::new(),
+                time_ms,
+                delay_ms: None,
+            })
             .collect()
     }
 

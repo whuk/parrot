@@ -42,7 +42,11 @@ pub struct Event {
 
 impl Event {
     fn new(frame: String) -> Self {
-        Event { frame, time_ms: None, delay_ms: None }
+        Event {
+            frame,
+            time_ms: None,
+            delay_ms: None,
+        }
     }
 }
 
@@ -59,16 +63,19 @@ pub fn parse(raw: &str, input_type: InputType) -> Result<(InputType, Vec<Event>)
     };
 
     if events.is_empty() {
-        return Err(format!("입력에서 이벤트를 찾지 못했습니다 (형식: {})", detected.as_str()));
+        return Err(format!(
+            "입력에서 이벤트를 찾지 못했습니다 (형식: {})",
+            detected.as_str()
+        ));
     }
     Ok((detected, events))
 }
 
 fn detect(raw: &str) -> (InputType, Vec<Event>) {
-    if raw.starts_with(['[', '{']) {
-        if let Ok(events) = json(raw) {
-            return (InputType::Json, events);
-        }
+    if raw.starts_with(['[', '{'])
+        && let Ok(events) = json(raw)
+    {
+        return (InputType::Json, events);
     }
     let has_sse_fields = raw.lines().any(|l| {
         let l = l.trim_start();
@@ -133,7 +140,10 @@ fn split_collapsed(block: &str) -> Vec<String> {
 
     let boundary: &dyn Fn(&str) -> bool = if event_lines > 1 {
         &is_event
-    } else if event_lines == 0 && data_lines.len() > 1 && data_lines.iter().all(|l| complete_data(l)) {
+    } else if event_lines == 0
+        && data_lines.len() > 1
+        && data_lines.iter().all(|l| complete_data(l))
+    {
         &is_data
     } else {
         return vec![block.to_string()];
@@ -190,7 +200,10 @@ fn devtools_line(line: &str) -> Option<Row> {
         let mut fields: Vec<&str> = line.split('\t').map(str::trim).collect();
         // 표 머리글 행 (Id / Type / Data / Time)
         let header_names = ["id", "type", "data", "time"];
-        if fields.iter().all(|f| header_names.iter().any(|h| f.eq_ignore_ascii_case(h))) {
+        if fields
+            .iter()
+            .all(|f| header_names.iter().any(|h| f.eq_ignore_ascii_case(h)))
+        {
             return None;
         }
         let time_ms = fields.last().and_then(|f| parse_clock(f));
@@ -200,7 +213,12 @@ fn devtools_line(line: &str) -> Option<Row> {
         let data = fields.pop()?.to_string();
         let event = fields.pop().filter(|s| !s.is_empty()).map(String::from);
         let id = fields.pop().filter(|s| !s.is_empty()).map(String::from);
-        Row { id, event, data, time_ms }
+        Row {
+            id,
+            event,
+            data,
+            time_ms,
+        }
     } else {
         // 탭이 없으면 "message {json} 12:34:56.789" 또는 줄 전체를 data로 본다
         let (rest, time_ms) = match line.rsplit_once(' ') {
@@ -211,12 +229,19 @@ fn devtools_line(line: &str) -> Option<Row> {
             None => (line, None),
         };
         let (event, data) = match rest.split_once(' ') {
-            Some((first, data)) if !looks_like_json(first) && looks_like_json(data.trim_start()) => {
+            Some((first, data))
+                if !looks_like_json(first) && looks_like_json(data.trim_start()) =>
+            {
                 (Some(first.to_string()), data.trim_start())
             }
             _ => (None, rest),
         };
-        Row { id: None, event, data: data.to_string(), time_ms }
+        Row {
+            id: None,
+            event,
+            data: data.to_string(),
+            time_ms,
+        }
     };
     Some(row)
 }
@@ -240,7 +265,16 @@ fn parse_clock(s: &str) -> Option<f64> {
 
 // ---------------------------------------------------------------- json
 
-const ENVELOPE_KEYS: &[&str] = &["data", "event", "type", "id", "time", "timestamp", "delay_ms", "retry"];
+const ENVELOPE_KEYS: &[&str] = &[
+    "data",
+    "event",
+    "type",
+    "id",
+    "time",
+    "timestamp",
+    "delay_ms",
+    "retry",
+];
 
 fn json(raw: &str) -> Result<Vec<Event>, String> {
     let value: Value = serde_json::from_str(raw).map_err(|e| format!("JSON 파싱 실패: {e}"))?;
@@ -260,11 +294,17 @@ fn json_event(item: &Value) -> Event {
                 Value::String(s) => s.clone(),
                 other => other.to_string(),
             };
-            let event = obj.get("event").or_else(|| obj.get("type")).and_then(Value::as_str);
+            let event = obj
+                .get("event")
+                .or_else(|| obj.get("type"))
+                .and_then(Value::as_str);
             let id = obj.get("id").and_then(Value::as_str);
             Event {
                 frame: frame(event, id, &data),
-                time_ms: obj.get("time").or_else(|| obj.get("timestamp")).and_then(json_time),
+                time_ms: obj
+                    .get("time")
+                    .or_else(|| obj.get("timestamp"))
+                    .and_then(json_time),
                 delay_ms: obj.get("delay_ms").and_then(Value::as_u64),
             }
         }
@@ -303,7 +343,11 @@ mod tests {
         assert_eq!(ty, InputType::Sse);
         assert_eq!(
             frames(&events),
-            ["event: message_start\ndata: {\"a\":1}\n\n", ": keep-alive\n\n", "event: ping\ndata: {}\n\n"]
+            [
+                "event: message_start\ndata: {\"a\":1}\n\n",
+                ": keep-alive\n\n",
+                "event: ping\ndata: {}\n\n"
+            ]
         );
     }
 
@@ -311,11 +355,21 @@ mod tests {
     fn sse_splits_collapsed_blocks() {
         let raw = "data: {\"a\":1}\ndata: {\"a\":2}\ndata: [DONE]";
         let (_, events) = parse(raw, InputType::Auto).unwrap();
-        assert_eq!(frames(&events), ["data: {\"a\":1}\n\n", "data: {\"a\":2}\n\n", "data: [DONE]\n\n"]);
+        assert_eq!(
+            frames(&events),
+            [
+                "data: {\"a\":1}\n\n",
+                "data: {\"a\":2}\n\n",
+                "data: [DONE]\n\n"
+            ]
+        );
 
         let raw = "event: a\ndata: {}\nevent: b\ndata: {}";
         let (_, events) = parse(raw, InputType::Sse).unwrap();
-        assert_eq!(frames(&events), ["event: a\ndata: {}\n\n", "event: b\ndata: {}\n\n"]);
+        assert_eq!(
+            frames(&events),
+            ["event: a\ndata: {}\n\n", "event: b\ndata: {}\n\n"]
+        );
     }
 
     #[test]
@@ -335,7 +389,11 @@ mod tests {
         assert_eq!(ty, InputType::Devtools);
         assert_eq!(
             frames(&events),
-            ["data: {\"x\":1}\n\n", "event: content_block_delta\ndata: {\"x\":2}\n\n", "data: [DONE]\n\n"]
+            [
+                "data: {\"x\":1}\n\n",
+                "event: content_block_delta\ndata: {\"x\":2}\n\n",
+                "data: [DONE]\n\n"
+            ]
         );
         let times: Vec<_> = events.iter().map(|e| e.time_ms.unwrap()).collect();
         assert_eq!(times, [43_200_100.0, 43_200_350.0, 43_201_000.0]);
@@ -352,7 +410,10 @@ mod tests {
         let raw = "message {\"a\": 1} 12:00:00.000\n{\"b\": 2}";
         let (ty, events) = parse(raw, InputType::Auto).unwrap();
         assert_eq!(ty, InputType::Devtools);
-        assert_eq!(frames(&events), ["data: {\"a\": 1}\n\n", "data: {\"b\": 2}\n\n"]);
+        assert_eq!(
+            frames(&events),
+            ["data: {\"a\": 1}\n\n", "data: {\"b\": 2}\n\n"]
+        );
         assert_eq!(events[0].time_ms, Some(43_200_000.0));
         assert_eq!(events[1].time_ms, None);
     }
@@ -383,7 +444,13 @@ mod tests {
             {"data":"[DONE]","delay_ms":500}
         ]"#;
         let (_, events) = parse(raw, InputType::Json).unwrap();
-        assert_eq!(frames(&events), ["event: ping\ndata: {\"type\":\"ping\"}\n\n", "data: [DONE]\n\n"]);
+        assert_eq!(
+            frames(&events),
+            [
+                "event: ping\ndata: {\"type\":\"ping\"}\n\n",
+                "data: [DONE]\n\n"
+            ]
+        );
         assert_eq!(events[0].time_ms, Some(36_000_000.0));
         assert_eq!(events[1].delay_ms, Some(500));
     }
