@@ -6,6 +6,7 @@
   <title>Parrot</title>
   <style>
     :root {
+      color-scheme: light dark;
       --bg: #f7f7f5;
       --panel: #ffffff;
       --fg: #1d1d1b;
@@ -82,22 +83,56 @@
     }
     .seg button.on { background: var(--accent); color: var(--accent-fg); }
 
-    .opts { display: flex; flex-wrap: wrap; gap: 10px; }
+    .opts { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: flex-end; }
     .opts[hidden] { display: none; }
-    label.opt { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+    label.opt { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+    label.opt[hidden] { display: none; }
+    label.opt[title] { cursor: help; }
+    label.opt[title] .q {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      margin-left: 3px;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      font-size: 10px;
+      line-height: 12px;
+      text-align: center;
+      vertical-align: 1px;
+    }
     select, input, textarea {
       font: inherit;
       color: var(--fg);
       background: var(--field);
       border: 1px solid var(--line);
       border-radius: 6px;
-      padding: 5px 8px;
     }
-    input[type=number] { width: 90px; }
-    input.wide { width: 170px; }
+    select, input {
+      height: 34px;
+      padding: 0 10px;
+    }
+    select {
+      appearance: none;
+      -webkit-appearance: none;
+      min-width: 112px;
+      padding-right: 30px;
+      cursor: pointer;
+      /* 테마 색을 따르는 꺾쇠 화살표 */
+      background-image:
+        linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+        linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+      background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%;
+      background-size: 5px 5px;
+      background-repeat: no-repeat;
+    }
+    select option { background: var(--panel); color: var(--fg); }
+    select.wide { min-width: 200px; }
+    input[type=number] { width: 96px; }
+    input.wide { width: 200px; }
     textarea {
       flex: 1;
       min-height: 160px;
+      padding: 8px 10px;
       resize: none;
       font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
     }
@@ -209,9 +244,18 @@
             <option value="line">줄</option>
           </select>
         </label>
-        <label class="opt">지연(ms)<input type="number" name="delay_ms" value="30" min="0"></label>
-        <label class="opt">지터(ms)<input type="number" name="jitter_ms" value="20" min="0"></label>
-        <label class="opt">모델명<input class="wide" name="model" placeholder="포맷별 기본값"></label>
+        <label class="opt" title="조각과 조각 사이에 기본으로 기다리는 시간"><span>지연(ms)<span class="q">?</span></span>
+          <input type="number" name="delay_ms" value="30" min="0">
+        </label>
+        <label class="opt" title="매 조각마다 0~N ms 사이의 무작위 시간을 지연에 더해 실제 LLM처럼 불규칙한 속도를 만듭니다. 0이면 일정한 간격"><span>지터(ms)<span class="q">?</span></span>
+          <input type="number" name="jitter_ms" value="20" min="0">
+        </label>
+        <label class="opt">모델명
+          <select class="wide" name="model"></select>
+        </label>
+        <label class="opt" id="model-custom" hidden>직접 입력
+          <input class="wide" name="model_custom" placeholder="예: my-model-v1">
+        </label>
       </div>
 
       <div class="opts" data-for="replay" hidden>
@@ -230,10 +274,18 @@
             <option value="fixed">고정 간격</option>
           </select>
         </label>
-        <label class="opt">배속<input type="number" name="speed" value="1" min="0.1" step="0.1"></label>
-        <label class="opt">지연(ms)<input type="number" name="delay_ms" value="30" min="0"></label>
-        <label class="opt">지터(ms)<input type="number" name="jitter_ms" value="0" min="0"></label>
-        <label class="opt">최대 간격(ms)<input type="number" name="max_gap_ms" placeholder="제한 없음" min="0"></label>
+        <label class="opt" title="원본 간격으로 재생할 때의 속도 배율. 2면 두 배 빠르게"><span>배속<span class="q">?</span></span>
+          <input type="number" name="speed" value="1" min="0.1" step="0.1">
+        </label>
+        <label class="opt" title="고정 간격으로 재생할 때 이벤트 사이 기다리는 시간"><span>지연(ms)<span class="q">?</span></span>
+          <input type="number" name="delay_ms" value="30" min="0">
+        </label>
+        <label class="opt" title="고정 간격에 0~N ms 사이의 무작위 시간을 더해 불규칙한 속도를 만듭니다"><span>지터(ms)<span class="q">?</span></span>
+          <input type="number" name="jitter_ms" value="0" min="0">
+        </label>
+        <label class="opt" title="원본 간격으로 재생할 때, 이벤트 사이가 이보다 길면 이 값으로 줄입니다 (긴 대기 구간 건너뛰기)"><span>최대 간격(ms)<span class="q">?</span></span>
+          <input type="number" name="max_gap_ms" placeholder="제한 없음" min="0">
+        </label>
       </div>
 
       <textarea id="input" spellcheck="false"></textarea>
@@ -301,6 +353,13 @@
       echo: '다른 LLM에서 받은 응답 텍스트를 붙여넣으세요.',
       replay: '캡처한 스트림을 붙여넣으세요.\n- SSE 원문 (DevTools Response 탭, curl 출력)\n- DevTools EventStream 탭 복사본\n- JSON 배열',
     };
+    // 첫 항목은 서버의 포맷별 기본 모델명 (src/formats/mod.rs default_model과 동일)
+    const MODELS = {
+      openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-5', 'gpt-5-mini', 'o3', 'o4-mini'],
+      claude: ['claude-sonnet-4-5', 'claude-opus-4-1', 'claude-haiku-4-5', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'],
+      gemini: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'],
+    };
+    const CUSTOM_MODEL = '__custom';
     const STORE_KEY = 'parrot:ui';
 
     let mode = 'echo';
@@ -330,8 +389,29 @@
       for (const el of $$('.opts [name]')) {
         const v = saved.fields?.[`${el.closest('.opts').dataset.for}.${el.name}`];
         if (v !== undefined) el.value = v;
+        // 모델 목록은 포맷에 따라 달라지므로, 포맷을 복원한 직후 다시 채운다 (DOM 순서상 model보다 앞)
+        if (el.name === 'format') renderModels();
       }
+      renderModels();
       mode = saved.mode === 'replay' ? 'replay' : 'echo';
+    }
+
+    // ---------------------------------------------------------------- 모델 목록
+    function renderModels() {
+      const format = $('[name=format]').value;
+      const select = $('[name=model]');
+      const previous = select.value;
+      const [defaultModel, ...others] = MODELS[format];
+
+      const option = (value, label) => new Option(label ?? value, value);
+      select.replaceChildren(
+        option('', `${defaultModel} (기본값)`),
+        ...others.map(m => option(m)),
+        option(CUSTOM_MODEL, '직접 입력…'),
+      );
+      // 새 포맷에도 있는 값이면 유지, 아니면 기본값으로
+      select.value = [...select.options].some(o => o.value === previous) ? previous : '';
+      $('#model-custom').hidden = select.value !== CUSTOM_MODEL;
     }
 
     // ---------------------------------------------------------------- 모드 / 탭
@@ -362,6 +442,10 @@
         if (el.value === '') continue;
         body[el.name] = el.type === 'number' ? Number(el.value) : el.value;
       }
+      if (body.model === CUSTOM_MODEL) {
+        body.model = body.model_custom?.trim() || undefined;
+      }
+      delete body.model_custom;
       return body;
     }
     function request(path) {
@@ -569,6 +653,12 @@
     $('#sample').addEventListener('click', insertSample);
     $('#curl').addEventListener('click', copyCurl);
     input.addEventListener('input', save);
+    $('[name=format]').addEventListener('change', renderModels);
+    $('[name=model]').addEventListener('change', () => {
+      const custom = $('[name=model]').value === CUSTOM_MODEL;
+      $('#model-custom').hidden = !custom;
+      if (custom) $('[name=model_custom]').focus();
+    });
     $$('.opts [name]').forEach(el => el.addEventListener('change', save));
     document.addEventListener('keydown', e => {
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -577,6 +667,7 @@
       }
     });
 
+    renderModels();
     restore();
     renderMode();
 
